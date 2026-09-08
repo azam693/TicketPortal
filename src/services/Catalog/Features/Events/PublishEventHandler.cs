@@ -1,4 +1,3 @@
-using Contracts.Exceptions;
 using Catalog.Infrastructure;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -22,17 +21,7 @@ public static class PublishEventHandler
                 detail: $"Event with id {id} not found.",
                 statusCode: StatusCodes.Status404NotFound);
 
-        try
-        {
-            @event.Publish();
-        }
-        catch (DomainException exception)
-        {
-            return TypedResults.Problem(
-                title: "EVENT_INVALID_STATE",
-                detail: exception.Message,
-                statusCode: StatusCodes.Status409Conflict);
-        }
+        @event.Publish();
 
         await context.SaveChangesAsync(cancellationToken);
         await cache.RemoveAsync($"event:{id}", cancellationToken);

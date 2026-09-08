@@ -1,12 +1,17 @@
 using Catalog.Features.Events;
+using Catalog.Features.Venues;
 using Catalog.Infrastructure;
+using Contracts.Exceptions;
+using Contracts.Middlewares;
 using Elastic.Clients.Elasticsearch;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-builder.Services.AddProblemDetails();
+builder.Services.AddValidation();
+builder.Services.AddProblemDetails(ProblemDetailsCustomizer.AddExceptionForDevMode);
+builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 
 builder.Services.AddDbContext<CatalogDbContext>(options =>
 {
@@ -37,18 +42,15 @@ builder.Services.AddStackExchangeRedisCache(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.UseDeveloperExceptionPage();
-}
-else
-{
-    app.UseExceptionHandler();
 }
 
 app.UseHttpsRedirection();
 app.MapEventEndpoints();
+app.MapVenueEndpoints();
 
 app.Run();

@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Contracts.Exceptions;
 using Catalog.Infrastructure;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -24,17 +23,7 @@ public static class UpdateEventHandler
                 detail: $"Event with id {id} not found.",
                 statusCode: StatusCodes.Status404NotFound);
 
-        try
-        {
-            @event.Update(request.Title, request.Description, request.StartsAt, request.SalesStartAt);
-        }
-        catch (DomainException exception)
-        {
-            return TypedResults.Problem(
-                title: "EVENT_INVALID",
-                detail: exception.Message,
-                statusCode: StatusCodes.Status400BadRequest);
-        }
+        @event.Update(request.Title, request.Description, request.StartsAt, request.SalesStartAt);
 
         await context.SaveChangesAsync(cancellationToken);
         await cache.RemoveAsync($"event:{id}", cancellationToken);
