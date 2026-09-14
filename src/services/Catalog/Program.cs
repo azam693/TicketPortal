@@ -5,6 +5,7 @@ using Contracts.Exceptions;
 using Contracts.Middlewares;
 using Elastic.Clients.Elasticsearch;
 using Microsoft.EntityFrameworkCore;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +48,7 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.MapEventEndpoints();
