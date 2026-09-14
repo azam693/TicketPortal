@@ -26,11 +26,12 @@ public class Event
         if (salesStartAt >= startsAt)
             throw new DomainException("Sales must start before the event");
         
+        Id = Guid.NewGuid();
         Title = title.Trim();
         Description = description.Trim();
         VenueId = venueId;
-        StartsAt = startsAt;
-        SalesStartAt = salesStartAt;
+        StartsAt = startsAt.ToUniversalTime();
+        SalesStartAt = salesStartAt.ToUniversalTime();
         Status = EventStatuses.Draft;
     }
 
@@ -48,8 +49,8 @@ public class Event
 
         Title = title.Trim();
         Description = description.Trim();
-        StartsAt = startsAt;
-        SalesStartAt = salesStartAt;
+        StartsAt = startsAt.ToUniversalTime();
+        SalesStartAt = salesStartAt.ToUniversalTime();
     }
 
     public void Publish()
