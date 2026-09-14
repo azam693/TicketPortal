@@ -9,13 +9,20 @@ public class SeatConfiguration : IEntityTypeConfiguration<Seat>
     public void Configure(EntityTypeBuilder<Seat> builder)
     {
         builder.ToTable("seats");
-        
+
         builder.HasKey(s => s.Id);
-        builder.Property(s => s.Id).ValueGeneratedOnAdd();
-        
+        builder.Property(s => s.Id).ValueGeneratedNever();
+
+        builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(20);
+
         builder.ComplexProperty(
             s => s.Price,
             price => price.Property(p => p.Currency).HasMaxLength(3));
+
+        builder.HasOne<Event>()
+            .WithMany()
+            .HasForeignKey(s => s.EventId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(s => new { s.EventId, s.SectionId, s.Row, s.Number }).IsUnique();
     }

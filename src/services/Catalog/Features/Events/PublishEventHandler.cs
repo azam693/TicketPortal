@@ -1,4 +1,7 @@
+using System.ComponentModel.DataAnnotations;
+using Catalog.Entities;
 using Catalog.Infrastructure;
+using Contracts;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -9,6 +12,7 @@ public static class PublishEventHandler
 {
     public static async Task<Results<Ok, ProblemHttpResult>> HandleAsync(
         Guid id,
+        PublishEventRequest request,
         CatalogDbContext context,
         IDistributedCache cache,
         CancellationToken cancellationToken)
@@ -21,6 +25,39 @@ public static class PublishEventHandler
                 detail: $"Event with id {id} not found.",
                 statusCode: StatusCodes.Status404NotFound);
 
+        if (@event.Status == EventStatuses.Published)
+            return TypedResults.Problem(
+                title: "EVENT_ALREADY_PUBLISHED",
+                detail: $"Event with id {id} is already published.",
+                statusCode: StatusCodes.Status409Conflict);
+
+        var venue = await context.Venues
+            .FirstOrDefaultAsync(venue => venue.Id == @event.VenueId, cancellationToken);
+        if (venue is null)
+            return TypedResults.Problem(
+                title: "VENUE_NOT_FOUND",
+                detail: $"Venue with id {@event.VenueId} not found.",
+                statusCode: StatusCodes.Status404NotFound);
+
+        var prices = request.Prices.ToDictionary(p => p.Category, p => new Money(p.Amount, p.Currency));
+        var missingCategories = venue.Sections
+            .Select(section => section.Category)
+            .Distinct()
+            .Where(category => !prices.ContainsKey(category))
+            .ToList();
+        if (missingCategories.Count > 0)
+            return TypedResults.Problem(
+                title: "MISSING_SEAT_PRICES",
+                detail: $"No price provided for categories: {string.Join(", ", missingCategories)}.",
+                statusCode: StatusCodes.Status400BadRequest);
+
+        var seats = venue.Sections.SelectMany(section =>
+            Enumerable.Range(1, section.RowsCount).SelectMany(row =>
+                Enumerable.Range(1, section.SeatsPerRow).Select(number =>
+                    new Seat(@event.Id, section.Id, row, number, prices[section.Category]))));
+
+        await context.Seats.AddRangeAsync(seats, cancellationToken);
+
         @event.Publish();
 
         await context.SaveChangesAsync(cancellationToken);
@@ -29,3 +66,10 @@ public static class PublishEventHandler
         return TypedResults.Ok();
     }
 }
+
+public record PublishEventRequest([Required] IReadOnlyList<SeatCategoryPriceRequest> Prices);
+
+public record SeatCategoryPriceRequest(
+    SeatCategories Category,
+    [property: Range(0.01, double.MaxValue)] decimal Amount,
+    [property: Required] string Currency);

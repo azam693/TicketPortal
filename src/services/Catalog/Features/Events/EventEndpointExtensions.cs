@@ -8,6 +8,7 @@ public static class EventEndpointExtensions
 
         eventEndpoint.MapGet("/", ListEventsHandler.HandleAsync);
         eventEndpoint.MapGet("/{id:guid}", GetEventByIdHandler.HandleAsync);
+        eventEndpoint.MapGet("/{id:guid}/seats", GetEventSeatsHandler.HandleAsync);
         eventEndpoint.MapPost("/", CreateEventHandler.HandleAsync);
         eventEndpoint.MapPut("/{id:guid}", UpdateEventHandler.HandleAsync);
         eventEndpoint.MapPost("/{id:guid}/publish", PublishEventHandler.HandleAsync);
