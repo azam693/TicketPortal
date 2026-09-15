@@ -1,9 +1,11 @@
+using Catalog.BackgroundServices;
 using Catalog.Features.Events;
 using Catalog.Features.Venues;
 using Catalog.Infrastructure;
 using Contracts.Exceptions;
 using Contracts.Middlewares;
 using Elastic.Clients.Elasticsearch;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -27,6 +29,16 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetConnectionString("Redis");
     options.InstanceName = builder.Configuration["catalog:"];
 });
+
+builder.Services.AddMassTransit(options =>
+{
+    options.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.Host(builder.Configuration.GetConnectionString("RabbitMq"));
+    });
+});
+
+builder.Services.AddHostedService<OutboxDispatcherService>();
 
 // builder.Services.AddSingleton<ElasticsearchClient>(_ =>
 // {

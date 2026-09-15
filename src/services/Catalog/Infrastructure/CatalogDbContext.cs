@@ -8,6 +8,7 @@ public class CatalogDbContext(DbContextOptions<CatalogDbContext> options) : DbCo
     public DbSet<Event> Events { get; set; }
     public DbSet<Venue> Venues { get; set; }
     public DbSet<Seat> Seats { get; set; }
+    public DbSet<OutboxMessage> OutboxMessages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

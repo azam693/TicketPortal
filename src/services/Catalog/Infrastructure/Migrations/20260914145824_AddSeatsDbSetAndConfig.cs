@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace Catalog.Infrastructure.Configurations
+namespace Catalog.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class AddSeatsDbSetAndConfig : Migration

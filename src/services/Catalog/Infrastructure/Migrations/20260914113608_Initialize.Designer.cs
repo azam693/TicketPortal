@@ -10,11 +10,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Catalog.Infrastructure.Configurations
+namespace Catalog.Infrastructure.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20260914145824_AddSeatsDbSetAndConfig")]
-    partial class AddSeatsDbSetAndConfig
+    [Migration("20260914113608_Initialize")]
+    partial class Initialize
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -63,6 +63,7 @@ namespace Catalog.Infrastructure.Configurations
             modelBuilder.Entity("Catalog.Entities.Seat", b =>
                 {
                     b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("EventId")
@@ -77,10 +78,8 @@ namespace Catalog.Infrastructure.Configurations
                     b.Property<Guid>("SectionId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.ComplexProperty(typeof(Dictionary<string, object>), "Price", "Catalog.Entities.Seat.Price#Money", b1 =>
                         {
@@ -135,15 +134,6 @@ namespace Catalog.Infrastructure.Configurations
                         .WithMany()
                         .HasForeignKey("VenueId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Catalog.Entities.Seat", b =>
-                {
-                    b.HasOne("Catalog.Entities.Event", null)
-                        .WithMany()
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Catalog.Entities;
 using Catalog.Infrastructure;
 using Contracts;
+using Contracts.Events;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -51,14 +52,28 @@ public static class PublishEventHandler
                 detail: $"No price provided for categories: {string.Join(", ", missingCategories)}.",
                 statusCode: StatusCodes.Status400BadRequest);
 
-        var seats = venue.Sections.SelectMany(section =>
-            Enumerable.Range(1, section.RowsCount).SelectMany(row =>
-                Enumerable.Range(1, section.SeatsPerRow).Select(number =>
-                    new Seat(@event.Id, section.Id, row, number, prices[section.Category]))));
+        var seats = venue.Sections
+            .SelectMany(section =>
+                Enumerable.Range(1, section.RowsCount).SelectMany(row =>
+                    Enumerable.Range(1, section.SeatsPerRow).Select(number =>
+                        new Seat(@event.Id, section.Id, row, number, prices[section.Category]))))
+            .ToList();
 
         await context.Seats.AddRangeAsync(seats, cancellationToken);
 
         @event.Publish();
+        
+        var sectionCategories = venue.Sections
+            .ToDictionary(section => section.Id, section => section.Category.ToString());
+        var integrationEvent = new EventPublished(
+            @event.Id,
+            venue.Id,
+            seats
+                .Select(s => new SeatSnapshot(
+                    s.Id, s.SectionId, s.Row, s.Number, s.Price.Amount,
+                    s.Price.Currency, sectionCategories[s.SectionId]))
+                .ToList());
+        context.OutboxMessages.Add(new OutboxMessage(integrationEvent));
 
         await context.SaveChangesAsync(cancellationToken);
         await cache.RemoveAsync($"event:{id}", cancellationToken);

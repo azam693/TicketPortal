@@ -9,7 +9,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Catalog.Infrastructure.Configurations
+namespace Catalog.Infrastructure.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
     partial class CatalogDbContextModelSnapshot : ModelSnapshot
@@ -55,6 +55,36 @@ namespace Catalog.Infrastructure.Configurations
                     b.HasIndex("VenueId");
 
                     b.ToTable("events", (string)null);
+                });
+
+            modelBuilder.Entity("Catalog.Entities.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessedAt");
+
+                    b.ToTable("outbox_messages", (string)null);
                 });
 
             modelBuilder.Entity("Catalog.Entities.Seat", b =>
