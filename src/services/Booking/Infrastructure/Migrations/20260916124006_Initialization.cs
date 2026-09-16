@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Booking.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class Initialize : Migration
+    public partial class Initialization : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

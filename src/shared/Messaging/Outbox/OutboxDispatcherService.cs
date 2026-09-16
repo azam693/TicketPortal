@@ -57,7 +57,11 @@ public class OutboxDispatcherService<TDbContext>(
                 var payload = JsonSerializer.Deserialize(message.Content, type)
                               ?? throw new InvalidOperationException($"Failed to deserialize outbox message {message.Id}.");
 
-                await publishEndpoint.Publish(payload, type, cancellationToken);
+                // MessageId = Id этой outbox-записи: если диспетчер упадёт
+                // после Publish, но до MarkProcessed, повторная отправка при
+                // рестарте придёт с тем же MessageId — потребитель дедупит
+                // по нему через Inbox.
+                await publishEndpoint.Publish(payload, type, ctx => ctx.MessageId = message.Id, cancellationToken);
 
                 message.MarkProcessed();
             }

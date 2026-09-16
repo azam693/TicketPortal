@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Booking.Infrastructure.Migrations
 {
     [DbContext(typeof(BookingDbContext))]
-    [Migration("20260916112440_Initialize")]
-    partial class Initialize
+    [Migration("20260916124006_Initialization")]
+    partial class Initialization
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
