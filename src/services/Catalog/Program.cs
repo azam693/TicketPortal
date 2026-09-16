@@ -1,4 +1,3 @@
-using Catalog.BackgroundServices;
 using Catalog.Features.Events;
 using Catalog.Features.Venues;
 using Catalog.Infrastructure;
@@ -6,6 +5,7 @@ using Contracts.Exceptions;
 using Contracts.Middlewares;
 using Elastic.Clients.Elasticsearch;
 using MassTransit;
+using Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -38,7 +38,7 @@ builder.Services.AddMassTransit(options =>
     });
 });
 
-builder.Services.AddHostedService<OutboxDispatcherService>();
+builder.Services.AddHostedService<OutboxDispatcherService<CatalogDbContext>>();
 
 // builder.Services.AddSingleton<ElasticsearchClient>(_ =>
 // {

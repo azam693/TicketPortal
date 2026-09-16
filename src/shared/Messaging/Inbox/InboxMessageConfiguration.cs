@@ -1,8 +1,7 @@
-using Booking.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace Booking.Infrastructure.Configurations;
+namespace Messaging.Inbox;
 
 public class InboxMessageConfiguration : IEntityTypeConfiguration<InboxMessage>
 {

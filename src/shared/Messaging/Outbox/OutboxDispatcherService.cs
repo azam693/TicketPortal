@@ -1,17 +1,20 @@
-﻿using System.Text.Json;
-using Catalog.Infrastructure;
+using System.Text.Json;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-namespace Catalog.BackgroundServices;
+namespace Messaging.Outbox;
 
-public class OutboxDispatcherService(
+public class OutboxDispatcherService<TDbContext>(
     IServiceScopeFactory scopeFactory,
-    ILogger<OutboxDispatcherService> logger) : BackgroundService
+    ILogger<OutboxDispatcherService<TDbContext>> logger) : BackgroundService
+    where TDbContext : DbContext, IOutboxDbContext
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
     private const int BatchSize = 50;
-    
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(PollInterval);
@@ -28,11 +31,11 @@ public class OutboxDispatcherService(
             }
         }
     }
-    
+
     private async Task DispatchPendingMessagesAsync(CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var context = scope.ServiceProvider.GetRequiredService<TDbContext>();
         var publishEndpoint = scope.ServiceProvider.GetRequiredService<IPublishEndpoint>();
 
         var messages = await context.OutboxMessages

@@ -1,6 +1,6 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
-namespace Catalog.Entities;
+namespace Messaging.Outbox;
 
 public class OutboxMessage
 {
@@ -11,21 +11,15 @@ public class OutboxMessage
     public DateTimeOffset? ProcessedAt { get; private set; }
     public string? Error { get; private set; }
 
-    private OutboxMessage() { }
-    
+    private OutboxMessage()
+    {
+    }
+
     public OutboxMessage(object data)
     {
         Id = Guid.NewGuid();
         Type = data.GetType().FullName!;
         Content = JsonSerializer.Serialize(data);
-        OccurredAt = DateTimeOffset.UtcNow;
-    }
-    
-    public OutboxMessage(string type, string content)
-    {
-        Id = Guid.NewGuid();
-        Type = type;
-        Content = content;
         OccurredAt = DateTimeOffset.UtcNow;
     }
 

@@ -6,5 +6,6 @@
   </Folder>
   <Folder Name="/src/shared/">
     <Project Path="src/shared/Contracts/Contracts.csproj" />
+    <Project Path="src/shared/Messaging/Messaging.csproj" />
   </Folder>
 </Solution>

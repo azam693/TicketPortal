@@ -1,4 +1,4 @@
-namespace Booking.Entities;
+namespace Messaging.Inbox;
 
 /// <summary>
 /// Дедупликация входящих интеграционных событий на стороне потребителя.

@@ -1,18 +1,17 @@
-﻿using Catalog.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace Catalog.Infrastructure.Configurations;
+namespace Messaging.Outbox;
 
 public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage>
 {
     public void Configure(EntityTypeBuilder<OutboxMessage> builder)
     {
         builder.ToTable("outbox_messages");
-        
+
         builder.HasKey(outbox => outbox.Id);
         builder.Property(outbox => outbox.Id).ValueGeneratedNever();
-        
+
         builder.Property(outbox => outbox.Type)
             .IsRequired()
             .HasMaxLength(100);

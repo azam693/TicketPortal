@@ -3,6 +3,7 @@ using Catalog.Entities;
 using Catalog.Infrastructure;
 using Contracts;
 using Contracts.Events;
+using Messaging.Outbox;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;

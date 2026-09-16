@@ -1,6 +1,8 @@
 using Booking.Infrastructure;
 using Contracts.Exceptions;
 using Contracts.Middlewares;
+using MassTransit;
+using Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +19,16 @@ builder.Services.AddDbContext<BookingDbContext>(options =>
         npgsql => npgsql
             .EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null));
 });
+
+builder.Services.AddMassTransit(options =>
+{
+    options.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.Host(builder.Configuration.GetConnectionString("RabbitMq"));
+    });
+});
+
+builder.Services.AddHostedService<OutboxDispatcherService<BookingDbContext>>();
 
 var app = builder.Build();
 

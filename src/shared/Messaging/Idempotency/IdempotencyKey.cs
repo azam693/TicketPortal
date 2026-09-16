@@ -1,4 +1,4 @@
-namespace Booking.Entities;
+namespace Messaging.Idempotency;
 
 /// <summary>
 /// Идемпотентность запроса клиента (Idempotency-Key), отдельная от
