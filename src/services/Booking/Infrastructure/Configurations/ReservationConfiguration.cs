@@ -15,6 +15,15 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
 
         builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
 
+        // Xmin как токен optimistic concurrency: защищает от гонки между
+        // ReservationExpirationSweeper и Confirm/Release-эндпоинтами,
+        // которые могут одновременно трогать одну и ту же бронь.
+        builder.Property(r => r.RowVersion)
+            .HasColumnName("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate()
+            .IsConcurrencyToken();
+
         builder.OwnsMany(r => r.Seats, seat =>
         {
             seat.ToTable("reservation_seats");

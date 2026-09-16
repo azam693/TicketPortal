@@ -1,3 +1,4 @@
+using Booking.BackgroundServices;
 using Booking.Features.Bookings;
 using Booking.Features.EventSeats;
 using Booking.Features.Integration;
@@ -42,6 +43,7 @@ builder.Services.AddMassTransit(options =>
 });
 
 builder.Services.AddHostedService<OutboxDispatcherService<BookingDbContext>>();
+builder.Services.AddHostedService<ReservationExpirationSweeper>();
 
 var app = builder.Build();
 

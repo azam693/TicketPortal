@@ -14,6 +14,7 @@ public class Reservation
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset ExpiresAt { get; private set; }
     public DateTimeOffset? ConfirmedAt { get; private set; }
+    public uint RowVersion { get; private set; }
 
     private Reservation()
     {
