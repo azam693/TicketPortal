@@ -117,27 +117,126 @@ ADR 0001. Публикуется через Outbox, не напрямую.
 ### 3.2 Booking — Step 2, не реализован
 
 **Назначение**: write-heavy сервис резервирования мест — самый нагруженный
-узел системы, ради которого вообще выбран этот домен.
+узел системы, ради которого вообще выбран этот домен. Не читает Catalog
+синхронно: строит и хранит собственную проекцию мест из `EventPublished`
+(ADR 0001) и дальше живёт автономно, включая во время недоступности Catalog.
 
-**Ожидаемая механика** (по ADR 0001 и роадмапу):
+Единица работы — не отдельное место, а **бронь (`Reservation`)**: клиент за
+один запрос может удерживать несколько мест события, и вся группа должна
+захватываться/освобождаться атомарно (либо все запрошенные места, либо ни
+одного). Класс агрегата назван `Reservation`, а не `Booking` — совпадение
+имени класса с корневым неймспейсом сервиса (`Booking`) ловится компилятором
+как коллизия (`CS0118: 'Booking' is a namespace but is used like a type`) в
+любом файле, где рядом оказываются `using Booking.Entities;` и сам
+неймспейс `Booking`; проверено сборкой. API-ресурс (`/api/bookings`) и
+доменный термин "бронь" остаются прежними — расхождение только в имени
+C#-класса.
 
-- Собственная таблица `Seats` (или `SeatHolds`), заполняемая асинхронно из
-  `EventPublished` (consumer + inbox для идемпотентности), а не читаемая
-  синхронно из Catalog.
-- Поля, специфичные для резервирования и не нужные Catalog: `LockToken`/TTL
-  удержания места, `RowVersion`/`xmin` для optimistic concurrency.
-- **Redis distributed lock** на короткое удержание места на время оформления
-  заказа (или чисто через optimistic concurrency в Postgres — сравнение
-  подходов стоит сделать явно, т.к. это центральная тема собеседований).
-- Публикует `SeatHeld` / `SeatReleased` / `SeatConfirmed` (потребляются Order
-  и, в перспективе, Catalog).
-- Идемпотентность операции "забронировать место" со стороны клиента
-  (повторный запрос с тем же idempotency key не создаёт вторую бронь).
+**Жизненный цикл**:
 
-**Открытый вопрос**: выбор между пессимистичной блокировкой (Redis lock с
-TTL) и чисто оптимистичной (row version + retry) как основной механизм —
-решать в начале Step 2, не заимствовать бездумно у Catalog (у Catalog нет
-конкурентной записи такого рода).
+```
+Seat (в Booking):        Available → Held → Sold
+                                    ↘ Released/Expired → Available
+
+Reservation:  Held → Confirmed
+                  ↘ Released (клиент отменил)
+                  ↘ Expired  (не подтверждена вовремя)
+```
+
+**Ключевые агрегаты** (реализованы в `Entities/`):
+
+- `Seat` — собственная проекция (не копия Catalog 1-в-1):
+  `Id, EventId, SectionId, Row, Number, Price (Money), Category, Status,
+  RowVersion (xmin)`. `Id` совпадает с `SeatId` из `EventPublished` — это
+  внешняя идентичность, а не локально генерируемая.
+- `Reservation` (агрегат-корень) — `Id, EventId, CustomerId?, Status,
+  Seats: IReadOnlyList<ReservationSeat> { SeatId }, CreatedAt, ExpiresAt,
+  ConfirmedAt?`. Инварианты в конструкторе/методах: нельзя создать пустую
+  бронь; `Confirm()`/`Release()`/`Expire()` допустимы только из `Held`.
+- `InboxMessage` — дедуп потребления `EventPublished` по
+  `EventEnvelope.MessageId` (см. п.2).
+- `OutboxMessage` — та же структура, что в Catalog, публикация через
+  `OutboxDispatcherService`.
+- `IdempotencyKey` — `Key` (из заголовка `Idempotency-Key`), `RequestHash`,
+  `ResponseStatusCode`, `ResponseBody`, `ExpiresAt`. Это **бизнесовая**
+  идемпотентность клиентского запроса "забронировать", отдельная от
+  транспортной (`MessageId`) — повторный `POST /api/bookings` с тем же
+  ключом возвращает прежний результат, а не создаёт вторую бронь.
+
+**События**:
+
+- Потребляет `EventPublished` (Catalog → Booking), сидирует таблицу `Seats`.
+- Публикует (новые типы в `Contracts.Events`, через Outbox):
+  `SeatsHeld(BookingId, EventId, SeatIds, ExpiresAt)`,
+  `BookingConfirmed(BookingId, EventId, SeatIds)`,
+  `BookingReleased(BookingId, EventId, SeatIds, Reason: UserCancelled | Expired)`.
+  Потребители в перспективе — Order (Step 4) и Catalog (обновление read-модели
+  `Seat.Status`, открытый вопрос из п.3.1).
+
+**Эндпоинты**:
+
+```
+POST   /api/bookings                — удержать N мест события
+       headers: Idempotency-Key (обязателен)
+       body: { EventId, SeatIds[] }
+       → 201 { BookingId, Status: Held, ExpiresAt }
+       → 409 если хотя бы одно место уже не Available
+
+POST   /api/bookings/{id}/confirm   — Held → Confirmed
+POST   /api/bookings/{id}/release   — Held → Released (явная отмена клиентом)
+GET    /api/bookings/{id}           — статус брони
+
+GET    /api/events/{eventId}/seats  — живая карта мест (Available/Held/Sold)
+                                       из собственной проекции Booking —
+                                       во время flash-sale именно Booking,
+                                       а не Catalog, источник правды
+```
+
+**Решение по concurrency-механизму** (закрывает прежний открытый вопрос —
+Redis lock vs optimistic concurrency не взаимоисключающие, у них разные
+роли):
+
+- **Optimistic concurrency (`RowVersion`/`xmin`)** — основной механизм защиты
+  от double-booking на уровне одной строки `Seat`:
+  `UPDATE ... WHERE Id=@id AND Status='Available' AND xmin=@rowVersion`.
+  Конфликт → retry с бэкоффом N раз → 409 "место уже занято".
+- **Redis distributed lock** — нужен не для одного места, а чтобы набор мест
+  внутри одной `Booking` захватывался атомарно: без распределённой
+  транзакции чистый optimistic concurrency не гарантирует "либо все места,
+  либо ни одного" при гонке параллельных запросов на пересекающийся набор
+  мест. Лок берётся на уровне запроса (например `lock:event:{eventId}:seats`)
+  только на время самой транзакции обновления, а не на весь TTL брони.
+- **TTL экспирации** брони — источник истины в Postgres (`ExpiresAt`),
+  проверяется лениво + подчищается фоновым
+  `ReservationExpirationSweeper : BackgroundService` (сканирует
+  `Held AND ExpiresAt < now()`, публикует `BookingReleased(Reason=Expired)`).
+  Чистый Redis-TTL для этого не годится: истечение ключа в Redis — "тихое"
+  событие, для надёжной публикации доменного события всё равно нужен опрос
+  БД или keyspace-notifications, что сложнее и менее надёжно, чем polling
+  собственной БД.
+
+**Структура папок** (шаблон из п.3.1):
+
+```
+src/services/Booking/
+  Entities/            Seat.cs, SeatStatuses.cs, Reservation.cs,
+                        ReservationSeat.cs, ReservationStatuses.cs,
+                        OutboxMessage.cs, InboxMessage.cs,
+                        IdempotencyKey.cs
+  Features/
+    Bookings/          CreateBookingHandler.cs, ConfirmBookingHandler.cs,
+                        ReleaseBookingHandler.cs, GetBookingByIdHandler.cs,
+                        BookingEndpointExtensions.cs
+    EventSeats/        GetEventSeatsHandler.cs, EventSeatsEndpointExtensions.cs
+    Integration/       EventPublishedConsumer.cs
+  Dtos/                BookingDto.cs, SeatDto.cs
+  Infrastructure/
+    BookingDbContext.cs
+    Configurations/    SeatConfiguration.cs, ReservationConfiguration.cs, ...
+    Migrations/
+  BackgroundServices/  OutboxDispatcherService.cs, BookingExpirationSweeper.cs
+  Program.cs
+```
 
 ### 3.3 Contracts / messaging — Step 3, частично реализовано
 
