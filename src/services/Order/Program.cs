@@ -1,16 +1,14 @@
-using Booking.BackgroundServices;
-using Booking.Features.Bookings;
-using Booking.Features.EventSeats;
-using Booking.Features.Integration;
-using Booking.Infrastructure;
-using Booking.Infrastructure.Locking;
+using Contracts.Commands;
 using Contracts.Exceptions;
 using Contracts.Middlewares;
 using MassTransit;
 using Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
+using Order.Features.Orders;
+using Order.Infrastructure;
+using Order.Infrastructure.Payments;
+using Order.Sagas;
 using Scalar.AspNetCore;
-using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +17,7 @@ builder.Services.AddValidation();
 builder.Services.AddProblemDetails(ProblemDetailsCustomizer.AddExceptionForDevMode);
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 
-builder.Services.AddDbContext<BookingDbContext>(options =>
+builder.Services.AddDbContext<OrderDbContext>(options =>
 {
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -27,15 +25,19 @@ builder.Services.AddDbContext<BookingDbContext>(options =>
             .EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null));
 });
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(
-    _ => ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
-builder.Services.AddSingleton<IDistributedLockService, RedisDistributedLockService>();
+builder.Services.AddScoped<IPaymentGateway, PaymentServiceGateway>();
 
 builder.Services.AddMassTransit(options =>
 {
-    options.AddConsumer<EventPublishedConsumer>();
-    options.AddConsumer<ConfirmReservationConsumer>();
-    options.AddConsumer<ReleaseReservationConsumer>();
+    options.AddSagaStateMachine<OrderStateMachine, Order.Entities.OrderState>()
+        .EntityFrameworkRepository(repository =>
+        {
+            repository.ExistingDbContext<OrderDbContext>();
+            repository.UsePostgres();
+            repository.ConcurrencyMode = ConcurrencyMode.Optimistic;
+        });
+
+    options.AddRequestClient<ProcessPayment>();
 
     options.UsingRabbitMq((ctx, cfg) =>
     {
@@ -44,8 +46,7 @@ builder.Services.AddMassTransit(options =>
     });
 });
 
-builder.Services.AddHostedService<OutboxDispatcherService<BookingDbContext>>();
-builder.Services.AddHostedService<ReservationExpirationSweeper>();
+builder.Services.AddHostedService<OutboxDispatcherService<OrderDbContext>>();
 
 var app = builder.Build();
 
@@ -57,7 +58,6 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-app.MapBookingEndpoints();
-app.MapEventSeatsEndpoints();
+app.MapOrderEndpoints();
 
 app.Run();

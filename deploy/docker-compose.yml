@@ -35,6 +35,40 @@ services:
         timeout: 5s
         retries: 5
 
+  order-postgres:
+    image: postgres:17-alpine
+    container_name: tp-order-postgres
+    environment:
+        POSTGRES_USER: ${ORDER_DB_USER:-order}
+        POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-order}
+        POSTGRES_DB: ${ORDER_DB_NAME:-order}
+    ports:
+        - "5434:5432"
+    volumes:
+        - order-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER:-order} -d ${ORDER_DB_NAME:-order}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+  payment-postgres:
+    image: postgres:17-alpine
+    container_name: tp-payment-postgres
+    environment:
+        POSTGRES_USER: ${PAYMENT_DB_USER:-payment}
+        POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment}
+        POSTGRES_DB: ${PAYMENT_DB_NAME:-payment}
+    ports:
+        - "5435:5432"
+    volumes:
+        - payment-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER:-payment} -d ${PAYMENT_DB_NAME:-payment}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
   catalog-redis:
     image: redis:7-alpine
     container_name: tp-catalog-redis
@@ -67,4 +101,6 @@ volumes:
   catalog-postgres-data:
   catalog-redis-data:
   booking-postgres-data:
+  order-postgres-data:
+  payment-postgres-data:
   rabbitmq_data:

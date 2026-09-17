@@ -3,6 +3,8 @@
   <Folder Name="/src/services/">
     <Project Path="src/services/Booking/Booking.csproj" />
     <Project Path="src/services/Catalog/Catalog.csproj" />
+    <Project Path="src/services/Order/Order.csproj" />
+    <Project Path="src/services/Payment/Payment.csproj" />
   </Folder>
   <Folder Name="/src/shared/">
     <Project Path="src/shared/Contracts/Contracts.csproj" />

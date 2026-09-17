@@ -20,5 +20,6 @@ public record BookingReleased(
 public enum BookingReleaseReasons
 {
     UserCancelled,
-    Expired
+    Expired,
+    PaymentFailed
 }

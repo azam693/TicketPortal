@@ -251,25 +251,124 @@ src/services/Booking/
 - добавить Inbox-паттерн (таблица обработанных `MessageId` на стороне
   потребителя) — первый раз понадобится в Booking.
 
-### 3.4 Order — Step 4, не реализован
+### 3.4 Order — Step 4, реализован (happy path + компенсация, Payment — мок)
 
-**Назначение**: оркестрирует happy path покупки как **сагу**
-(Order → Booking → Payment), явно управляя компенсирующими действиями при
-отказе на любом шаге (например, оплата не прошла → освободить место).
+**Назначение**: оркестрирует покупку как **сагу** (`MassTransitStateMachine`)
+поверх уже существующей Held-брони, явно управляя компенсацией при отказе
+(оплата не прошла → освободить место).
 
-**Ожидаемая механика**: MassTransit `Saga`/State Machine (`MassTransitStateMachine`)
-поверх RabbitMQ, персистентное состояние саги в своей БД. Здесь впервые в
-проекте появляется явная компенсация вместо просто "публикую событие и
-забываю".
+**Ключевое архитектурное решение**: сама фаза Hold (`POST /api/bookings`) в
+сагу не входит и остаётся прямым синхронным REST-вызовом клиент → Booking,
+как и раньше. Это горячий flash-sale путь с optimistic concurrency + Redis
+lock, где клиенту критично мгновенно получить `409`, если место занято;
+заворачивать его в сагу означало бы добавить лишний хоп через шину именно
+там, где приложение обязано быть быстрым — то есть прямо против цели проекта
+(п.1). Клиент-серверный REST не нарушает принцип "асинхронно между
+сервисами" из п.2 — тот принцип про интеграцию сервис-сервис, а не про
+клиентские вызовы. Order-сага начинается только после того, как у клиента
+уже есть `Held`-бронь, и оркестрирует `Confirm → Payment → (Release при
+отказе)`.
 
-### 3.5 Payment — Step 4, не реализован
+**Корреляция**: `OrderState.CorrelationId` (Id саги/заказа) намеренно равен
+`ReservationId`, а не отдельно сгенерированному `OrderId` — одна Held-бронь
+конвертируется ровно в один заказ, и это делает тривиальной корреляцию
+входящих событий Booking (`BookingConfirmed`/`BookingReleased` несут
+`ReservationId`, а не `OrderId`) без отдельной таблицы соответствий.
+
+**Сага (`OrderStateMachine`)**:
+
+```
+(none) --SubmitOrder--> AwaitingConfirmation
+AwaitingConfirmation --BookingConfirmed, оплата OK--> Completed
+AwaitingConfirmation --BookingConfirmed, оплата отказ--> AwaitingCompensation
+AwaitingConfirmation --BookingReleased (истёк холд)--> Failed
+AwaitingCompensation --BookingReleased (компенсация подтверждена)--> Failed
+```
+
+`Completed`/`Failed` — обычные состояния саги, а не встроенный `Final`:
+инстанс не удаляется после завершения (в отличие от типичного
+`SetCompletedWhenFinalized()`), потому что `GET /api/orders/{id}` должен
+продолжать отдавать финальный статус.
+
+Все исходящие сообщения саги (`ConfirmReservation`/`ReleaseReservation` в
+Booking, `OrderCompleted`/`OrderFailed` наружу) идут не напрямую через
+`Publish`, а через тот же ручной Outbox, что и в Catalog/Booking:
+`OrderDbContext.OutboxMessages`, дописываемый в ту же транзакцию, что
+сохраняет состояние саги (EF saga-репозиторий MassTransit настроен на
+`ExistingDbContext<OrderDbContext>`, поэтому это одна и та же транзакция) —
+иначе переход состояния и отправка сообщения не были бы атомарны.
+
+**Payment**: `IPaymentGateway` с реализацией `PaymentServiceGateway` —
+request/response через шину (`MassTransit IRequestClient<ProcessPayment>`)
+к отдельному сервису Payment (см. п.3.5), вызываемой синхронно внутри саги.
+Сага (`OrderStateMachine`) не изменилась при переходе от прежней
+`FakePaymentGateway` к реальному сервису — она видит только интерфейс.
+
+**Новые контракты**: `Contracts.Commands.ConfirmReservation`,
+`Contracts.Commands.ReleaseReservation`, `Contracts.Commands.SubmitOrder`,
+`Contracts.Events.OrderCompleted`, `Contracts.Events.OrderFailed`. Booking
+получил consumer'ы для `ConfirmReservation`/`ReleaseReservation` с тем же
+Inbox-дедупом, что и `EventPublishedConsumer`; HTTP-эндпоинты
+`/api/bookings/{id}/confirm|release` при этом не изменились — переиспользуют
+ту же доменную логику (`ConfirmReservationHandler.ConfirmAsync` /
+`ReleaseReservationHandler.ReleaseAsync`), просто без немедленного
+`SaveChanges`, чтобы consumer мог сохранить результат одной транзакцией с
+записью в Inbox.
+
+**Эндпоинты**:
+
+```
+POST /api/orders            — { ReservationId, CustomerId?, Amount, Currency }
+                               публикует SubmitOrder, саги ещё не существует
+                               в момент ответа → 202 Accepted { OrderId }
+GET  /api/orders/{id}       — статус саги (Id == ReservationId)
+```
+
+### 3.5 Payment — Step 4, реализован
 
 **Назначение**: идемпотентный шлюз оплаты (в учебных целях — мок реального
 провайдера с намеренной нестабильностью для отработки retry/idempotency).
+Реальный провайдер (Stripe) пока не подключён — `ProcessPaymentConsumer`
+сам случайно проваливает часть запросов (`PaymentGatewayOptions.FailureRate`,
+как раньше `FakePaymentGateway` внутри Order).
 
-**Ожидаемая механика**: идемпотентность по ключу платежа (не по
-`MessageId` шины, а по бизнес-ключу заказа — двух разных гарантий
-идемпотентности стоит коснуться явно: транспортная и бизнесовая).
+**Ключевое архитектурное решение**: интеграция с Order — не
+publish/subscribe интеграционного события, а MassTransit request/response
+(`IRequestClient<ProcessPayment>` → `IConsumer<ProcessPayment>` →
+`context.RespondAsync`). Сага должна получить результат оплаты синхронно в
+рамках текущей обработки `BookingConfirmed`, а не продолжать работу по
+отдельному входящему событию — поэтому здесь оправдан RPC-паттерн поверх
+шины, а не Outbox/Inbox, как в остальных интеграциях сервис-сервис.
+
+**Идемпотентность**: по бизнес-ключу платежа, а не по `MessageId` шины —
+двух разных гарантий идемпотентности стоит коснуться явно, транспортная и
+бизнесовая. `PaymentTransaction.Id` (класс назван не `Payment` — коллизия с
+корневым неймспейсом сервиса, см. аналогичное решение для
+`Reservation`/`Booking` в п.3.2) равен `OrderId` (= `ReservationId` саги).
+Повторный `ProcessPayment` с тем же `OrderId` (redelivery запроса при
+at-least-once доставке через шину) находит уже сохранённую запись и
+возвращает её результат вместо повторного списания у провайдера — отдельный
+Inbox по `MessageId` не нужен, бизнес-ключ уже накрывает этот случай.
+
+**Эндпоинты**: `GET /api/payments/{orderId}` — статус платежа, для отладки.
+
+**Структура папок** (шаблон из п.3.1, без Outbox/Inbox — они не нужны для
+чистого request/response):
+
+```
+src/services/Payment/
+  Entities/            PaymentTransaction.cs, PaymentStatuses.cs
+  Features/
+    Payments/          ProcessPaymentConsumer.cs, GetPaymentByOrderIdHandler.cs,
+                        PaymentEndpointExtensions.cs
+  Dtos/                PaymentDto.cs
+  Infrastructure/
+    PaymentDbContext.cs
+    Configurations/    PaymentTransactionConfiguration.cs
+    Migrations/
+    PaymentGatewayOptions.cs
+  Program.cs
+```
 
 ### 3.6 API Gateway (YARP) — Step 5, не реализован
 
