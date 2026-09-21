@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: payment-secrets
+  namespace: ticketportal
+type: Opaque
+stringData:
+  ConnectionStrings__DefaultConnection: "Host=payment-postgres;Port=5432;Database=payment;Username=payment;Password=payment"
+  ConnectionStrings__RabbitMq: "rabbitmq://rabbitmq:rabbitmq@rabbitmq:5672"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment
+  namespace: ticketportal
+  labels:
+    app: payment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment
+  template:
+    metadata:
+      labels:
+        app: payment
+    spec:
+      containers:
+        - name: payment
+          image: ticketportal/payment:placeholder
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: payment-secrets
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: PaymentGateway__FailureRate
+              value: "0.2"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment
+  namespace: ticketportal
+spec:
+  selector:
+    app: payment
+  ports:
+    - port: 8080
+      targetPort: 8080

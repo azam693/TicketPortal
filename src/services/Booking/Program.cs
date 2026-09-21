@@ -51,9 +51,10 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+app.MapOpenApi();
+
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
     app.MapScalarApiReference();
 }
 

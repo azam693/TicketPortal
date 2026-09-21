@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: ticketportal
+spec:
+  template:
+    spec:
+      containers:
+        - name: catalog
+          imagePullPolicy: Always

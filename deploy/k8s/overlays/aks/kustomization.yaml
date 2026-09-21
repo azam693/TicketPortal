@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# TODO: замените myacr на реальное имя вашего Azure Container Registry
+# (например my-ticketportal-acr.azurecr.io), и v1 — на реальный тег образа,
+# который вы запушили через `docker push`.
+images:
+  - name: ticketportal/catalog
+    newName: myacr.azurecr.io/catalog
+    newTag: v1
+  - name: ticketportal/booking
+    newName: myacr.azurecr.io/booking
+    newTag: v1
+  - name: ticketportal/order
+    newName: myacr.azurecr.io/order
+    newTag: v1
+  - name: ticketportal/payment
+    newName: myacr.azurecr.io/payment
+    newTag: v1
+  - name: ticketportal/gateway
+    newName: myacr.azurecr.io/gateway
+    newTag: v1
+
+patches:
+  - path: pull-policy-catalog.yaml
+  - path: pull-policy-booking.yaml
+  - path: pull-policy-order.yaml
+  - path: pull-policy-payment.yaml
+  - path: pull-policy-gateway.yaml

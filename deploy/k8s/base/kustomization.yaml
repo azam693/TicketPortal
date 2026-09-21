@@ -1,0 +1,16 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - catalog-postgres.yaml
+  - booking-postgres.yaml
+  - order-postgres.yaml
+  - payment-postgres.yaml
+  - redis.yaml
+  - rabbitmq.yaml
+  - catalog.yaml
+  - booking.yaml
+  - order.yaml
+  - payment.yaml
+  - gateway.yaml
+  - ingress.yaml
