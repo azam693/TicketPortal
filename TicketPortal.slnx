@@ -11,4 +11,7 @@
     <Project Path="src/shared/Contracts/Contracts.csproj" />
     <Project Path="src/shared/Messaging/Messaging.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Catalog.Tests/Catalog.Tests.csproj" />
+  </Folder>
 </Solution>
